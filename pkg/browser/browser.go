@@ -1,0 +1,262 @@
+package browser
+
+import (
+	"fmt"
+	"log"
+	"strings"
+
+	"github.com/gvx3/sportuni-book/pkg/config"
+	"github.com/playwright-community/playwright-go"
+)
+
+func performLogin(page playwright.Page, email string, pwd string) error {
+	if err := page.GetByPlaceholder("Email, phone, or Skype").Fill(email); err != nil {
+		return fmt.Errorf("could not fill username: %w", err)
+	}
+
+	if err := page.Locator("input.win-button[value='Next']").Click(); err != nil {
+		return fmt.Errorf("could not click next button: %w", err)
+	}
+
+	if err := page.GetByPlaceholder("Password").Fill(pwd); err != nil {
+		return fmt.Errorf("could not fill password: %w", err)
+	}
+
+	if err := page.Locator("input.win-button[value='Sign in']").Click(); err != nil {
+		return fmt.Errorf("could not click sign in button: %w", err)
+	}
+	return nil
+}
+
+func NewBrowser() (playwright.Browser, error) {
+	pw, err := playwright.Run()
+	if err != nil {
+		return nil, fmt.Errorf("unable to run Playwright: %w", err)
+	}
+
+	browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(false),
+		SlowMo:   playwright.Float(500),
+	})
+	if err != nil {
+		pw.Stop()
+		return nil, fmt.Errorf("could not run Firefox: %w", err)
+	}
+
+	return browser, nil
+}
+
+func NavigateToLogin(page playwright.Page, baseUrl string) error {
+	if _, err := page.Goto(baseUrl); err != nil {
+		return fmt.Errorf("could not go to %s: %w ", baseUrl, err)
+	}
+
+	if err := page.Locator("a.ups-settings-link:has-text('Settings')").Click(); err != nil {
+		return fmt.Errorf("could not click the settings button: %w", err)
+	}
+
+	if err := page.Locator("a.ui-btn:has-text('Sign in')").Click(); err != nil {
+		return fmt.Errorf("could not click the sign in button: %w", err)
+	}
+
+	return nil
+}
+
+// If state file expired
+func StateFileExpireLogin(page playwright.Page, baseURL string) error {
+	err := NavigateToLogin(page, baseURL)
+	if err != nil {
+		return fmt.Errorf("could not navigate to state file login: %w", err)
+	}
+
+	pickAccount := page.Locator("div[role='heading']").Filter(
+		playwright.LocatorFilterOptions{HasText: "Pick an account"})
+
+	err = pickAccount.WaitFor(playwright.LocatorWaitForOptions{
+		Timeout: playwright.Float(10000),
+	})
+
+	if err == nil {
+		return fmt.Errorf("===state file expired, closing context===")
+	}
+	return nil
+}
+
+//If state file succeeded
+
+func StateFileSucceedLogin(page playwright.Page, baseURL string) error {
+	err := NavigateToLogin(page, baseURL)
+	if err != nil {
+		return fmt.Errorf("could not navigate to login: %w", err)
+	}
+
+	popUpSignIn := page.Locator("div[role='heading']").Filter(
+		playwright.LocatorFilterOptions{HasText: "Stay signed in?"})
+
+	err = popUpSignIn.WaitFor(playwright.LocatorWaitForOptions{
+		Timeout: playwright.Float(20000),
+	})
+
+	if err == nil {
+		log.Printf("Succeeded using state file. Proceed...")
+		if err := page.Locator("input.win-button[value='No']").Click(); err != nil {
+			return fmt.Errorf("cannot click no: %w", err)
+		}
+	}
+	return nil
+}
+
+func FreshLogin(page playwright.Page, baseUrl string, email string, pwd string) error {
+	log.Printf("===START FRESH LOGIN===")
+
+	err := NavigateToLogin(page, baseUrl)
+	if err != nil {
+		return err
+	}
+
+	err = performLogin(page, email, pwd)
+	if err != nil {
+		return err
+	}
+
+	faAuth := page.Locator("#idDiv_SAOTCAS_Title")
+	if err := faAuth.WaitFor(playwright.LocatorWaitForOptions{
+		Timeout: playwright.Float(3000),
+	}); err != nil {
+		return fmt.Errorf("2FA Authentication does not show up: %w", err)
+	}
+
+	log.Println("===2FA Authentication REQUIRED===")
+	log.Println("Waiting for entering 2FA code OR timeout (55s)...")
+
+	faAuthNext := page.GetByText("Stay signed in?")
+	err = faAuthNext.WaitFor(playwright.LocatorWaitForOptions{
+		Timeout: playwright.Float(55000),
+	})
+
+	if err != nil {
+		return fmt.Errorf("2FA is not fulfilled: %w", err)
+	}
+
+	log.Println("FRESH LOGIN: Stay signed in appeared. Proceed..")
+	if err := page.Locator("input.win-button[value='No']").Click(); err != nil {
+		return fmt.Errorf("cannot click no: %w", err)
+	}
+
+	if _, err := page.Context().StorageState("ms_user.json"); err != nil {
+		log.Printf("cannot save state file: %v", err)
+	}
+
+	return nil
+}
+
+func BookCourse(page playwright.Page, choices []config.ActivitySlot) error {
+	var activitySlots []config.ActivitySlot
+
+	var matchResult []config.ActivitySlot
+	slotMap := make(map[string]config.ActivitySlot)
+
+	if err := page.Locator("a.ui-btn.ui-btn-icon-right:has-text('Courses')").Click(); err != nil {
+		return fmt.Errorf("could not find and click courses: %w ", err)
+	}
+
+	_, err := page.Locator("select#type").SelectOption(playwright.SelectOptionValues{
+		Labels: playwright.StringSlice("Ball games"),
+	})
+	if err != nil {
+		return fmt.Errorf("cannot choose game selection %w", err)
+	}
+
+	_, err = page.Locator("select#area").SelectOption(playwright.SelectOptionValues{
+		Labels: playwright.StringSlice("Hervanta"),
+	})
+	if err != nil {
+		return fmt.Errorf("cannot choose game area: %w", err)
+	}
+
+	hourSlots, err := page.Locator("li:has(span)").All()
+	if err != nil {
+		return fmt.Errorf("cannot find elements with date to book: %w", err)
+	}
+
+	for _, slot := range hourSlots {
+		hourText, err := slot.TextContent()
+		if err != nil {
+			continue
+		}
+		//Format: "Wed 11.6. 20:00 Badminton"
+		parts := strings.Fields(hourText)
+		playslot := config.ActivitySlot{
+			Day:      parts[0],
+			Date:     parts[1],
+			Hour:     parts[2],
+			Activity: parts[3],
+		}
+		activitySlots = append(activitySlots, playslot)
+
+	}
+
+	for _, slot := range activitySlots {
+		key := fmt.Sprintf("%v|%v|%v", slot.Day, slot.Hour, slot.Activity)
+		slotMap[key] = slot
+	}
+
+	for _, c := range choices {
+		key := fmt.Sprintf("%v|%v|%v", c.Day, c.Hour, c.Activity)
+		if slot, exists := slotMap[key]; exists {
+			matchResult = append(matchResult, slot)
+		}
+	}
+
+	if len(matchResult) == 0 {
+		return fmt.Errorf("the book choices doesn't exist")
+	}
+	log.Printf("Match result: %v\n", matchResult)
+	for _, v := range matchResult {
+
+		locator := fmt.Sprintf("li:has(a:text-is('%s %s')):has(span:text-is('%s %s'))", v.Hour, v.Activity, v.Day, v.Date)
+
+		err = page.Locator(locator).Click()
+		if err != nil {
+			return fmt.Errorf("cannot click the exact schedule: %v", err)
+		}
+
+		if err := tryBookCourt(page, 6); err != nil {
+			return fmt.Errorf("failed to book any court: %v", err)
+		}
+
+		err = page.Locator("div.ups-dialog-content:text-is('Thank you for your booking!')").WaitFor(playwright.LocatorWaitForOptions{
+			Timeout: playwright.Float(2000),
+		})
+		if err == nil {
+			if err = page.Locator("a.ui-btn:text-is('Ok')").Click(); err != nil {
+				log.Printf("Close booking dialog")
+				return nil
+			}
+		} else {
+			return fmt.Errorf("cannot clock booking dialog: %v", err)
+		}
+
+		err = page.Locator("div:has(h1:text-is('Sulkapallo')) a.ui-btn.ui-corner-all.ui-icon-delete[role='button']:has-text('Close')").First().Click()
+		if err != nil {
+			return fmt.Errorf("failed closing booking court windows: %v", err)
+		}
+	}
+	return nil
+}
+
+func tryBookCourt(page playwright.Page, maxCourts int) error {
+	for i := 1; i <= maxCourts; i++ {
+		locator := fmt.Sprintf("a.ui-link:has-text('Book court %d')", i)
+		err := page.Locator(locator).WaitFor(playwright.LocatorWaitForOptions{
+			Timeout: playwright.Float(1000),
+		})
+		if err == nil {
+			if err := page.Locator(locator).Click(); err == nil {
+				log.Printf("Successfully booked court %d", i)
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("no courts available (tried 1-%d)", maxCourts)
+}
