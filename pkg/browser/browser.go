@@ -62,7 +62,6 @@ func NavigateToLogin(page playwright.Page, baseUrl string) error {
 	return nil
 }
 
-// If state file expired
 func StateFileExpireLogin(page playwright.Page, baseURL string) error {
 	err := NavigateToLogin(page, baseURL)
 	if err != nil {
@@ -82,19 +81,16 @@ func StateFileExpireLogin(page playwright.Page, baseURL string) error {
 	return nil
 }
 
-//If state file succeeded
-
 func StateFileSucceedLogin(page playwright.Page, baseURL string) error {
 	err := NavigateToLogin(page, baseURL)
 	if err != nil {
 		return fmt.Errorf("could not navigate to login: %w", err)
 	}
 
-	popUpSignIn := page.Locator("div[role='heading']").Filter(
-		playwright.LocatorFilterOptions{HasText: "Stay signed in?"})
+	popUpSignIn := page.Locator("div[role='heading']:has-text('Stay signed in?')")
 
 	err = popUpSignIn.WaitFor(playwright.LocatorWaitForOptions{
-		Timeout: playwright.Float(20000),
+		Timeout: playwright.Float(3000),
 	})
 
 	if err == nil {
@@ -151,10 +147,7 @@ func FreshLogin(page playwright.Page, baseUrl string, email string, pwd string) 
 }
 
 func BookCourse(page playwright.Page, choices []config.ActivitySlot) error {
-	var activitySlots []config.ActivitySlot
-
 	var matchResult []config.ActivitySlot
-	slotMap := make(map[string]config.ActivitySlot)
 
 	if err := page.Locator("a.ui-btn.ui-btn-icon-right:has-text('Courses')").Click(); err != nil {
 		return fmt.Errorf("could not find and click courses: %w ", err)
@@ -174,44 +167,24 @@ func BookCourse(page playwright.Page, choices []config.ActivitySlot) error {
 		return fmt.Errorf("cannot choose game area: %w", err)
 	}
 
-	hourSlots, err := page.Locator("li:has(span)").All()
+	matchResult, err = matchSlots(page, choices)
 	if err != nil {
-		return fmt.Errorf("cannot find elements with date to book: %w", err)
-	}
-
-	for _, slot := range hourSlots {
-		hourText, err := slot.TextContent()
-		if err != nil {
-			continue
-		}
-		//Format: "Wed 11.6. 20:00 Badminton"
-		parts := strings.Fields(hourText)
-		playslot := config.ActivitySlot{
-			Day:      parts[0],
-			Date:     parts[1],
-			Hour:     parts[2],
-			Activity: parts[3],
-		}
-		activitySlots = append(activitySlots, playslot)
-
-	}
-
-	for _, slot := range activitySlots {
-		key := fmt.Sprintf("%v|%v|%v", slot.Day, slot.Hour, slot.Activity)
-		slotMap[key] = slot
-	}
-
-	for _, c := range choices {
-		key := fmt.Sprintf("%v|%v|%v", c.Day, c.Hour, c.Activity)
-		if slot, exists := slotMap[key]; exists {
-			matchResult = append(matchResult, slot)
-		}
+		return err
 	}
 
 	if len(matchResult) == 0 {
-		return fmt.Errorf("the book choices doesn't exist")
+		log.Printf("No result for the current week, looking for next week")
+		err := page.Locator("a.ui-btn:has-text('Next week')").Click()
+		if err != nil {
+			return fmt.Errorf("cannot click next week: %w", err)
+		}
+		matchResult, err = matchSlots(page, choices)
+		if err != nil {
+			return fmt.Errorf("the book choices doesn't exist")
+		}
 	}
 	log.Printf("Match result: %v\n", matchResult)
+
 	for _, v := range matchResult {
 
 		locator := fmt.Sprintf("li:has(a:text-is('%s %s')):has(span:text-is('%s %s'))", v.Hour, v.Activity, v.Day, v.Date)
@@ -259,4 +232,48 @@ func tryBookCourt(page playwright.Page, maxCourts int) error {
 		}
 	}
 	return fmt.Errorf("no courts available (tried 1-%d)", maxCourts)
+}
+
+func matchSlots(page playwright.Page, choices []config.ActivitySlot) ([]config.ActivitySlot, error) {
+	hourSlots, err := page.Locator("li:has(span)").All()
+	if err != nil {
+		return nil, fmt.Errorf("cannot find elements with date to book: %w", err)
+	}
+
+	var activitySlots []config.ActivitySlot
+	slotMap := make(map[string]config.ActivitySlot)
+	var matchResult []config.ActivitySlot
+
+	for _, slot := range hourSlots {
+		hourText, err := slot.TextContent()
+		if err != nil {
+			continue
+		}
+		//Format: "Wed 11.6. 20:00 Badminton"
+		parts := strings.Fields(hourText)
+		if len(parts) < 4 {
+			continue
+		}
+		playslot := config.ActivitySlot{
+			Day:      parts[0],
+			Date:     parts[1],
+			Hour:     parts[2],
+			Activity: parts[3],
+		}
+		activitySlots = append(activitySlots, playslot)
+	}
+
+	for _, slot := range activitySlots {
+		key := fmt.Sprintf("%v|%v|%v", slot.Day, slot.Hour, slot.Activity)
+		slotMap[key] = slot
+	}
+
+	for _, c := range choices {
+		key := fmt.Sprintf("%v|%v|%v", c.Day, c.Hour, c.Activity)
+		if slot, exists := slotMap[key]; exists {
+			matchResult = append(matchResult, slot)
+		}
+	}
+
+	return matchResult, nil
 }
