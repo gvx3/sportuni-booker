@@ -30,3 +30,5 @@ activity_slots:
     hour: "14:00"
     activity: "Tennis"
 
+course_type: "ball_games"
+course_area: "hervanta"
