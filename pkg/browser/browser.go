@@ -35,8 +35,8 @@ func NewBrowser() (playwright.Browser, *playwright.Playwright, error) {
 	}
 
 	browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false),
-		SlowMo:   playwright.Float(500),
+		Headless: playwright.Bool(true),
+		//SlowMo:   playwright.Float(500),
 	})
 	if err != nil {
 		pw.Stop()
@@ -235,6 +235,22 @@ func tryBookCourt(page playwright.Page, maxCourts int) error {
 }
 
 func matchSlots(page playwright.Page, choices []config.ActivitySlot) ([]config.ActivitySlot, error) {
+	// ==For Headless mode==
+	err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+		State: playwright.LoadStateNetworkidle,
+	})
+	if err != nil {
+		log.Printf("Warning: Network not idle: %v", err)
+	}
+
+	err = page.Locator("li:has(span)").First().WaitFor(playwright.LocatorWaitForOptions{
+		Timeout: playwright.Float(5000),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("no time slots found: %w", err)
+	}
+	// ================
+
 	hourSlots, err := page.Locator("li:has(span)").All()
 	if err != nil {
 		return nil, fmt.Errorf("cannot find elements with date to book: %w", err)

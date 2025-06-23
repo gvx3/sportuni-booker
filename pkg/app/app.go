@@ -22,7 +22,12 @@ func RunApp() error {
 	defer browser.Close()
 	defer pw.Stop()
 
-	freshContext, err := browser.NewContext()
+	freshContext, err := browser.NewContext(playwright.BrowserNewContextOptions{
+		Viewport: &playwright.Size{
+			Width:  1920,
+			Height: 1080,
+		},
+	})
 	if err != nil {
 		return err
 	}
