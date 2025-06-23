@@ -28,10 +28,10 @@ func performLogin(page playwright.Page, email string, pwd string) error {
 	return nil
 }
 
-func NewBrowser() (playwright.Browser, error) {
+func NewBrowser() (playwright.Browser, *playwright.Playwright, error) {
 	pw, err := playwright.Run()
 	if err != nil {
-		return nil, fmt.Errorf("unable to run Playwright: %w", err)
+		return nil, nil, fmt.Errorf("unable to run Playwright: %w", err)
 	}
 
 	browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{
@@ -40,10 +40,10 @@ func NewBrowser() (playwright.Browser, error) {
 	})
 	if err != nil {
 		pw.Stop()
-		return nil, fmt.Errorf("could not run Firefox: %w", err)
+		return nil, nil, fmt.Errorf("could not run Firefox: %w", err)
 	}
 
-	return browser, nil
+	return browser, pw, nil
 }
 
 func NavigateToLogin(page playwright.Page, baseUrl string) error {
@@ -146,7 +146,7 @@ func FreshLogin(page playwright.Page, baseUrl string, email string, pwd string) 
 	return nil
 }
 
-func BookCourse(page playwright.Page, choices []config.ActivitySlot) error {
+func BookCourse(page playwright.Page, choices []config.ActivitySlot, courseTypeDisplay string, areaTypeDisplay string) error {
 	var matchResult []config.ActivitySlot
 
 	if err := page.Locator("a.ui-btn.ui-btn-icon-right:has-text('Courses')").Click(); err != nil {
@@ -154,14 +154,14 @@ func BookCourse(page playwright.Page, choices []config.ActivitySlot) error {
 	}
 
 	_, err := page.Locator("select#type").SelectOption(playwright.SelectOptionValues{
-		Labels: playwright.StringSlice("Ball games"),
+		Labels: playwright.StringSlice(courseTypeDisplay),
 	})
 	if err != nil {
 		return fmt.Errorf("cannot choose game selection %w", err)
 	}
 
 	_, err = page.Locator("select#area").SelectOption(playwright.SelectOptionValues{
-		Labels: playwright.StringSlice("Hervanta"),
+		Labels: playwright.StringSlice(areaTypeDisplay),
 	})
 	if err != nil {
 		return fmt.Errorf("cannot choose game area: %w", err)

@@ -3,7 +3,6 @@ package app
 import (
 	"log"
 	"os"
-	"time"
 
 	br "github.com/gvx3/sportuni-book/pkg/browser"
 	"github.com/gvx3/sportuni-book/pkg/config"
@@ -16,11 +15,12 @@ func RunApp() error {
 		return err
 	}
 
-	browser, err := br.NewBrowser()
+	browser, pw, err := br.NewBrowser()
 	if err != nil {
 		return err
 	}
 	defer browser.Close()
+	defer pw.Stop()
 
 	freshContext, err := browser.NewContext()
 	if err != nil {
@@ -82,12 +82,12 @@ func RunApp() error {
 		}
 	}
 
-	err = br.BookCourse(activePage, slots)
+	err = br.BookCourse(activePage, slots, baseConfig.DisplayCourseOption(), baseConfig.DisplayCourseArea())
 	if err != nil {
 		return err
 	}
 
-	time.Sleep(20 * time.Second)
+	// time.Sleep(20 * time.Second)
 	return nil
 }
 
