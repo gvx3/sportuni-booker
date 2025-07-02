@@ -87,7 +87,7 @@ func RunApp() error {
 		}
 	}
 
-	err = br.BookCourse(activePage, slots, baseConfig.DisplayCourseOption(), baseConfig.DisplayCourseArea())
+	err = br.BookCourse(activePage, slots)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -8,6 +9,20 @@ import (
 	"github.com/gvx3/sportuni-book/pkg/config"
 	"github.com/playwright-community/playwright-go"
 )
+
+var ErrNoTimeSlots = errors.New("no time slot elements appeared on the page")
+
+func headlessBrowserOptions(testing bool) playwright.BrowserTypeLaunchOptions {
+	if !testing {
+		return playwright.BrowserTypeLaunchOptions{
+			Headless: playwright.Bool(false),
+			SlowMo:   playwright.Float(500),
+		}
+	}
+	return playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(true),
+	}
+}
 
 func performLogin(page playwright.Page, email string, pwd string) error {
 	if err := page.GetByPlaceholder("Email, phone, or Skype").Fill(email); err != nil {
@@ -34,10 +49,7 @@ func NewBrowser() (playwright.Browser, *playwright.Playwright, error) {
 		return nil, nil, fmt.Errorf("unable to run Playwright: %w", err)
 	}
 
-	browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true),
-		//SlowMo:   playwright.Float(500),
-	})
+	browser, err := pw.Firefox.Launch(headlessBrowserOptions(false))
 	if err != nil {
 		pw.Stop()
 		return nil, nil, fmt.Errorf("could not run Firefox: %w", err)
@@ -125,6 +137,13 @@ func FreshLogin(page playwright.Page, baseUrl string, email string, pwd string) 
 	log.Println("===2FA Authentication REQUIRED===")
 	log.Println("Waiting for entering 2FA code OR timeout (55s)...")
 
+	locator := page.Locator("div#idRichContext_DisplaySign.displaySign")
+	code, err := locator.TextContent()
+	if err != nil {
+		log.Fatalf("Failed to get 2FA code text: %v", err)
+	}
+	fmt.Println("2FA code is:", code)
+
 	faAuthNext := page.GetByText("Stay signed in?")
 	err = faAuthNext.WaitFor(playwright.LocatorWaitForOptions{
 		Timeout: playwright.Float(55000),
@@ -146,73 +165,86 @@ func FreshLogin(page playwright.Page, baseUrl string, email string, pwd string) 
 	return nil
 }
 
-func BookCourse(page playwright.Page, choices []config.ActivitySlot, courseTypeDisplay string, areaTypeDisplay string) error {
+func BookCourse(page playwright.Page, choices []config.ActivitySlot) error {
 	var matchResult []config.ActivitySlot
+	for _, c := range choices {
 
-	if err := page.Locator("a.ui-btn.ui-btn-icon-right:has-text('Courses')").Click(); err != nil {
-		return fmt.Errorf("could not find and click courses: %w ", err)
-	}
-
-	_, err := page.Locator("select#type").SelectOption(playwright.SelectOptionValues{
-		Labels: playwright.StringSlice(courseTypeDisplay),
-	})
-	if err != nil {
-		return fmt.Errorf("cannot choose game selection %w", err)
-	}
-
-	_, err = page.Locator("select#area").SelectOption(playwright.SelectOptionValues{
-		Labels: playwright.StringSlice(areaTypeDisplay),
-	})
-	if err != nil {
-		return fmt.Errorf("cannot choose game area: %w", err)
-	}
-
-	matchResult, err = matchSlots(page, choices)
-	if err != nil {
-		return err
-	}
-
-	if len(matchResult) == 0 {
-		log.Printf("No result for the current week, looking for next week")
-		err := page.Locator("a.ui-btn:has-text('Next week')").Click()
-		if err != nil {
-			return fmt.Errorf("cannot click next week: %w", err)
-		}
-		matchResult, err = matchSlots(page, choices)
-		if err != nil {
-			return fmt.Errorf("the book choices doesn't exist")
-		}
-	}
-	log.Printf("Match result: %v\n", matchResult)
-
-	for _, v := range matchResult {
-
-		locator := fmt.Sprintf("li:has(a:text-is('%s %s')):has(span:text-is('%s %s'))", v.Hour, v.Activity, v.Day, v.Date)
-
-		err = page.Locator(locator).Click()
-		if err != nil {
-			return fmt.Errorf("cannot click the exact schedule: %v", err)
+		if err := page.Locator("a.ui-btn.ui-btn-icon-right:has-text('Courses')").Click(); err != nil {
+			return fmt.Errorf("could not find and click courses: %w ", err)
 		}
 
-		if err := tryBookCourt(page, 6); err != nil {
-			return fmt.Errorf("failed to book any court: %v", err)
-		}
-
-		err = page.Locator("div.ups-dialog-content:text-is('Thank you for your booking!')").WaitFor(playwright.LocatorWaitForOptions{
-			Timeout: playwright.Float(2000),
+		_, err := page.Locator("select#type").SelectOption(playwright.SelectOptionValues{
+			Labels: playwright.StringSlice(c.DisplayCourseOption(c.Activity)),
 		})
-		if err == nil {
-			if err = page.Locator("a.ui-btn:text-is('Ok')").Click(); err != nil {
-				log.Printf("Close booking dialog")
-				return nil
-			}
-		} else {
-			return fmt.Errorf("cannot clock booking dialog: %v", err)
+		if err != nil {
+			return fmt.Errorf("cannot choose game selection %w", err)
 		}
 
-		err = page.Locator("div:has(h1:text-is('Sulkapallo')) a.ui-btn.ui-corner-all.ui-icon-delete[role='button']:has-text('Close')").First().Click()
+		_, err = page.Locator("select#area").SelectOption(playwright.SelectOptionValues{
+			Labels: playwright.StringSlice(c.DisplayCourseArea(c.CourseArea)),
+		})
 		if err != nil {
-			return fmt.Errorf("failed closing booking court windows: %v", err)
+			return fmt.Errorf("cannot choose game area: %w", err)
+		}
+
+		matchResult, err = matchSlot(page, c)
+		if err != nil {
+			if errors.Is(err, ErrNoTimeSlots) {
+				log.Printf("[WARN] No time slots found for the current week (no <li> elements). Trying next week.")
+				err := page.Locator("a.ui-btn:has-text('Next week')").Click()
+				if err != nil {
+					return fmt.Errorf("cannot click next week: %w", err)
+				}
+				matchResult, err = matchSlot(page, c)
+				if err != nil {
+					return fmt.Errorf("the book choices doesn't exist")
+				}
+			} else {
+				return err
+			}
+		}
+
+		if len(matchResult) == 0 {
+			log.Printf("[WARN] Time slots found, but none match the intended criteria. Trying next week.")
+			err := page.Locator("a.ui-btn:has-text('Next week')").Click()
+			if err != nil {
+				return fmt.Errorf("cannot click next week: %w", err)
+			}
+			matchResult, err = matchSlot(page, c)
+			if err != nil {
+				return fmt.Errorf("the book choices doesn't exist")
+			}
+		}
+		log.Printf("Match result: %v\n", matchResult)
+
+		for _, v := range matchResult {
+			locator := fmt.Sprintf("li:has(a:text-is('%s %s')):has(span:text-is('%s %s'))", v.Hour, v.Activity, v.Day, v.Date)
+
+			err = page.Locator(locator).Click()
+			if err != nil {
+				return fmt.Errorf("cannot click the exact schedule: %v", err)
+			}
+
+			if err := tryBookCourt(page, 6); err != nil {
+				return fmt.Errorf("failed to book any court: %v", err)
+			}
+
+			err = page.Locator("div.ups-dialog-content:text-is('Thank you for your booking!')").WaitFor(playwright.LocatorWaitForOptions{
+				Timeout: playwright.Float(2000),
+			})
+			if err == nil {
+				if err = page.Locator("a.ui-btn:text-is('Ok')").Click(); err != nil {
+					log.Printf("Close booking dialog")
+					return nil
+				}
+			} else {
+				return fmt.Errorf("cannot close booking dialog: %v", err)
+			}
+			locator = fmt.Sprintf("div:has(h1:text-is('%s')) a.ui-btn.ui-corner-all.ui-icon-delete[role='button']:has-text('Close')", c.DisplaySportDialogMap(c.Activity))
+			err = page.Locator(locator).First().Click()
+			if err != nil {
+				return fmt.Errorf("failed closing booking court windows: %v", err)
+			}
 		}
 	}
 	return nil
@@ -234,20 +266,27 @@ func tryBookCourt(page playwright.Page, maxCourts int) error {
 	return fmt.Errorf("no courts available (tried 1-%d)", maxCourts)
 }
 
-func matchSlots(page playwright.Page, choices []config.ActivitySlot) ([]config.ActivitySlot, error) {
+func tryReserveCourt(page playwright.Page) error {
+	err := page.Locator("a.ui-link:has-text('Reserve')").WaitFor(playwright.LocatorWaitForOptions{
+		Timeout: playwright.Float(1000),
+	})
+	if err == nil {
+		if err := page.Locator("a.ui-link:has-text('Reserve')").Click(); err == nil {
+			log.Printf("Successfully reserved court")
+			return nil
+		}
+	}
+
+	return fmt.Errorf("cannnot reserve court")
+}
+
+func matchSlot(page playwright.Page, choice config.ActivitySlot) ([]config.ActivitySlot, error) {
 	// ==For Headless mode==
 	err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
 		State: playwright.LoadStateNetworkidle,
 	})
 	if err != nil {
 		log.Printf("Warning: Network not idle: %v", err)
-	}
-
-	err = page.Locator("li:has(span)").First().WaitFor(playwright.LocatorWaitForOptions{
-		Timeout: playwright.Float(5000),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("no time slots found: %w", err)
 	}
 	// ================
 
@@ -256,7 +295,7 @@ func matchSlots(page playwright.Page, choices []config.ActivitySlot) ([]config.A
 		return nil, fmt.Errorf("cannot find elements with date to book: %w", err)
 	}
 
-	var activitySlots []config.ActivitySlot
+	var scrapedSlots []config.ActivitySlot
 	slotMap := make(map[string]config.ActivitySlot)
 	var matchResult []config.ActivitySlot
 
@@ -276,19 +315,17 @@ func matchSlots(page playwright.Page, choices []config.ActivitySlot) ([]config.A
 			Hour:     parts[2],
 			Activity: parts[3],
 		}
-		activitySlots = append(activitySlots, playslot)
+		scrapedSlots = append(scrapedSlots, playslot)
 	}
 
-	for _, slot := range activitySlots {
+	for _, slot := range scrapedSlots {
 		key := fmt.Sprintf("%v|%v|%v", slot.Day, slot.Hour, slot.Activity)
 		slotMap[key] = slot
 	}
 
-	for _, c := range choices {
-		key := fmt.Sprintf("%v|%v|%v", c.Day, c.Hour, c.Activity)
-		if slot, exists := slotMap[key]; exists {
-			matchResult = append(matchResult, slot)
-		}
+	key := fmt.Sprintf("%v|%v|%v", choice.Day, choice.Hour, choice.Activity)
+	if slot, exists := slotMap[key]; exists {
+		matchResult = append(matchResult, slot)
 	}
 
 	return matchResult, nil

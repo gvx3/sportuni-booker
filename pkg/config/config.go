@@ -9,25 +9,30 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type CourseOption string
-type AreaOption string
+// type AreaOption string
 
 const (
-	CourseBallGame CourseOption = "ball_games"
-	// CourseOther    CourseOption = "other"
+	Badminton string = "Badminton"
+	Billiard  string = "Billiards"
 )
 const (
-	AreaHervanta   AreaOption = "hervanta"
-	AreaKauppi     AreaOption = "kauppi"
-	AreaCityCentre AreaOption = "citycentre"
+	AreaHervanta   string = "hervanta"
+	AreaKauppi     string = "kauppi"
+	AreaCityCentre string = "citycentre"
 )
 
-var courseTypeDisplay = map[CourseOption]string{
-	CourseBallGame: "Ball games",
-	// CourseOther:    "Other",
+var sportAreaMap = map[string]string{
+	Badminton: "Ball games",
+	Billiard:  "Other",
 }
 
-var areaTypeDisplay = map[AreaOption]string{
+// add sportDialogMap
+var sportDialogMap = map[string]string{
+	Badminton: "Sulkapallo",
+	Billiard:  "Biljardi",
+}
+
+var areaTypeDisplay = map[string]string{
 	AreaHervanta:   "Hervanta",
 	AreaKauppi:     "Kauppi",
 	AreaCityCentre: "City centre",
@@ -39,15 +44,14 @@ type Config struct {
 	Password      string         `yaml:"password"`
 	StateFileName string         `yaml:"state_file_name"`
 	ActivitySlots []ActivitySlot `yaml:"activity_slots"`
-	CourseType    CourseOption   `yaml:"course_type"`
-	CourseArea    AreaOption     `yaml:"course_area"`
 }
 
 type ActivitySlot struct {
-	Day      string `yaml:"day"`
-	Date     string `yaml:"date"`
-	Hour     string `yaml:"hour"`
-	Activity string `yaml:"activity"`
+	Day        string `yaml:"day"`
+	Date       string `yaml:"date"`
+	Hour       string `yaml:"hour"`
+	Activity   string `yaml:"activity"`
+	CourseArea string `yaml:"course_area"`
 }
 
 func NewConfig() (*Config, error) {
@@ -71,36 +75,38 @@ func NewConfig() (*Config, error) {
 		Email:         getEnv("SPORTUNI_EMAIL", ""),
 		Password:      getEnv("SPORTUNI_PASSWORD", ""),
 		StateFileName: getEnv("SPORTUNI_STATE_FILE", "ms_user.json"),
-		CourseType:    CourseBallGame, // default
-		CourseArea:    AreaHervanta,   // default
+		ActivitySlots: config.ActivitySlots,
+		// CourseType:    CourseBallGame, // default
+		// CourseArea:    AreaHervanta,   // default
 	}, nil
 }
 
 func (c *Config) Validate() error {
-	if _, ok := courseTypeDisplay[c.CourseType]; !ok {
-		options := make([]string, 0, len(courseTypeDisplay))
-		for k := range courseTypeDisplay {
-			options = append(options, string(k))
-		}
-		return fmt.Errorf("invalid course_type: %s\n available options are: %s", c.CourseType, strings.Join(options, " | "))
-	}
 
-	if _, ok := areaTypeDisplay[c.CourseArea]; !ok {
-		options := make([]string, 0, len(areaTypeDisplay))
-		for k := range areaTypeDisplay {
-			options = append(options, string(k))
+	for _, slot := range c.ActivitySlots {
+
+		if _, ok := areaTypeDisplay[slot.CourseArea]; !ok {
+			options := make([]string, 0, len(areaTypeDisplay))
+			for k := range areaTypeDisplay {
+				options = append(options, string(k))
+			}
+			return fmt.Errorf("invalid course_area: %s\n available options are: %s", slot.CourseArea, strings.Join(options, " | "))
 		}
-		return fmt.Errorf("invalid course_area: %s\n available options are: %s", c.CourseArea, strings.Join(options, " | "))
+
 	}
 	return nil
 }
 
-func (c *Config) DisplayCourseOption() string {
-	return courseTypeDisplay[c.CourseType]
+func (a *ActivitySlot) DisplaySportDialogMap(sport string) string {
+	return sportDialogMap[sport]
 }
 
-func (c *Config) DisplayCourseArea() string {
-	return areaTypeDisplay[c.CourseArea]
+func (a *ActivitySlot) DisplayCourseOption(sport string) string {
+	return sportAreaMap[sport]
+}
+
+func (a *ActivitySlot) DisplayCourseArea(area string) string {
+	return areaTypeDisplay[area]
 }
 
 func getConfigPath() (string, error) {
