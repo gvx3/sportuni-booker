@@ -12,15 +12,17 @@ state_file_name: "ms_user.json"
 
 # Activity slots to book
 # Date can be left emptied
+#activity values: Badminton, Billiards
+#course_area values: hervanta, kauppi, citycentre
 activity_slots:
-  - day: "Tue"
+  - day: "Thu"
     date: ""
-    hour: "16:00"
+    hour: "08:00"
     activity: "Badminton"
     course_area: "hervanta"
-  - day: "Wed"
+  - day: "Thu"
     date: ""
-    hour: "07:00"
-    activity: "Badminton"
+    hour: "13:00"
+    activity: "Billiards"
     course_area: "hervanta"
 

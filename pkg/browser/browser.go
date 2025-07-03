@@ -49,7 +49,7 @@ func NewBrowser() (playwright.Browser, *playwright.Playwright, error) {
 		return nil, nil, fmt.Errorf("unable to run Playwright: %w", err)
 	}
 
-	browser, err := pw.Firefox.Launch(headlessBrowserOptions(false))
+	browser, err := pw.Firefox.Launch(headlessBrowserOptions(true))
 	if err != nil {
 		pw.Stop()
 		return nil, nil, fmt.Errorf("could not run Firefox: %w", err)
@@ -214,6 +214,10 @@ func BookCourse(page playwright.Page, choices []config.ActivitySlot) error {
 			if err != nil {
 				return fmt.Errorf("the book choices doesn't exist")
 			}
+			if len(matchResult) == 0 {
+				log.Printf("[INFO] No matching slots found after checking next week. Moving to next choice.")
+				continue
+			}
 		}
 		log.Printf("Match result: %v\n", matchResult)
 
@@ -225,8 +229,19 @@ func BookCourse(page playwright.Page, choices []config.ActivitySlot) error {
 				return fmt.Errorf("cannot click the exact schedule: %v", err)
 			}
 
-			if err := tryBookCourt(page, 6); err != nil {
-				return fmt.Errorf("failed to book any court: %v", err)
+			bookingType := c.DisplayBookingType(c.Activity)
+
+			switch bookingType {
+			case config.BookingCourtType:
+				if err := tryBookCourt(page, 6); err != nil {
+					return fmt.Errorf("failed to book any court: %v", err)
+				}
+			case config.ReserveCourtType:
+				if err := tryReserveCourt(page); err != nil {
+					return fmt.Errorf("failed to reserve any court: %v", err)
+				}
+			default:
+				return fmt.Errorf("unknown booking type: %v", bookingType)
 			}
 
 			err = page.Locator("div.ups-dialog-content:text-is('Thank you for your booking!')").WaitFor(playwright.LocatorWaitForOptions{

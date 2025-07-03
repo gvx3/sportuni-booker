@@ -21,12 +21,16 @@ const (
 	AreaCityCentre string = "citycentre"
 )
 
+const (
+	BookingCourtType string = "BookingCourt"
+	ReserveCourtType string = "ReserveCourt"
+)
+
 var sportAreaMap = map[string]string{
 	Badminton: "Ball games",
 	Billiard:  "Other",
 }
 
-// add sportDialogMap
 var sportDialogMap = map[string]string{
 	Badminton: "Sulkapallo",
 	Billiard:  "Biljardi",
@@ -36,6 +40,11 @@ var areaTypeDisplay = map[string]string{
 	AreaHervanta:   "Hervanta",
 	AreaKauppi:     "Kauppi",
 	AreaCityCentre: "City centre",
+}
+
+var sportBookingTypeMap = map[string]string{
+	Badminton: BookingCourtType,
+	Billiard:  ReserveCourtType,
 }
 
 type Config struct {
@@ -76,8 +85,6 @@ func NewConfig() (*Config, error) {
 		Password:      getEnv("SPORTUNI_PASSWORD", ""),
 		StateFileName: getEnv("SPORTUNI_STATE_FILE", "ms_user.json"),
 		ActivitySlots: config.ActivitySlots,
-		// CourseType:    CourseBallGame, // default
-		// CourseArea:    AreaHervanta,   // default
 	}, nil
 }
 
@@ -107,6 +114,13 @@ func (a *ActivitySlot) DisplayCourseOption(sport string) string {
 
 func (a *ActivitySlot) DisplayCourseArea(area string) string {
 	return areaTypeDisplay[area]
+}
+
+func (a *ActivitySlot) DisplayBookingType(sport string) string {
+	if t, ok := sportBookingTypeMap[a.Activity]; ok {
+		return t
+	}
+	return "Unknown"
 }
 
 func getConfigPath() (string, error) {
