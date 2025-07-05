@@ -35,6 +35,10 @@ A tool to automate booking your favorite sports activities at TUNI using *Playwr
     ./sb -f /path/to/config.yaml
     ```
 
+## Demo
+
+![Demo of SportUni booking automation](/asset/demo.gif)
+
 ## Configuration
 
 The application requires a YAML configuration file. The config file can be located in one of the following places:
