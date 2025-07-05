@@ -48,7 +48,7 @@ The application requires a YAML configuration file. The config file can be locat
 You can also specify a custom config file location using the CLI flag `-f` or `--file`:
 
 ```sh
-./sportuni-booker -f /path/to/your/config.yaml
+./sb -f /path/to/your/config.yaml
 ```
 
 ### Example `config.yaml`
@@ -73,4 +73,3 @@ activity_slots:
     activity: "Billiards"
     course_area: "citycentre"
 ```
-
