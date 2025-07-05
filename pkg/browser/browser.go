@@ -25,7 +25,9 @@ func headlessBrowserOptions(testing bool) playwright.BrowserTypeLaunchOptions {
 }
 
 func performLogin(page playwright.Page, email string, pwd string) error {
-	if err := page.GetByPlaceholder("Email, phone, or Skype").Fill(email); err != nil {
+	if err := page.GetByPlaceholder("Email, phone, or Skype").Fill(email, playwright.LocatorFillOptions{
+		Timeout: playwright.Float(5000),
+	}); err != nil {
 		return fmt.Errorf("could not fill username: %w", err)
 	}
 
@@ -33,7 +35,9 @@ func performLogin(page playwright.Page, email string, pwd string) error {
 		return fmt.Errorf("could not click next button: %w", err)
 	}
 
-	if err := page.GetByPlaceholder("Password").Fill(pwd); err != nil {
+	if err := page.GetByPlaceholder("Password").Fill(pwd, playwright.LocatorFillOptions{
+		Timeout: playwright.Float(5000),
+	}); err != nil {
 		return fmt.Errorf("could not fill password: %w", err)
 	}
 

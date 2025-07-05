@@ -9,12 +9,7 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
-func RunApp() error {
-	baseConfig, err := config.NewConfig()
-	if err != nil {
-		return err
-	}
-
+func RunAppWithConfig(baseConfig *config.Config) error {
 	browser, pw, err := br.NewBrowser()
 	if err != nil {
 		return err

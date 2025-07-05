@@ -9,8 +9,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// type AreaOption string
-
 const (
 	Badminton string = "Badminton"
 	Billiard  string = "Billiards"
@@ -64,31 +62,45 @@ type ActivitySlot struct {
 }
 
 func NewConfig() (*Config, error) {
+	configPath, err := getConfigPath(false)
+	if err == nil {
+		config, err := LoadConfigFromFile(configPath)
+		if err == nil {
+			if err = config.Validate(); err != nil {
+				return nil, fmt.Errorf("config validation failed: %w", err)
+			}
+			return config, nil
+		}
+	}
 
-	configPath, err := getConfigPath()
+	configPath, err = getConfigPath(true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine config path: %w", err)
 	}
 
-	config, err := loadConfigFromFile(configPath)
-
-	if err == nil {
-		if err := config.Validate(); err != nil {
-			return nil, fmt.Errorf("config validation failed: %w", err)
-		}
-		return config, nil
+	config, err := LoadConfigFromFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config file: %w", err)
 	}
-
-	return &Config{
-		BaseURL:       getEnv("SPORTUNI_BASE_URL", "https://www.tuni.fi/sportuni/omasivu/?newPage=selection&lang=en"),
-		Email:         getEnv("SPORTUNI_EMAIL", ""),
-		Password:      getEnv("SPORTUNI_PASSWORD", ""),
-		StateFileName: getEnv("SPORTUNI_STATE_FILE", "ms_user.json"),
-		ActivitySlots: config.ActivitySlots,
-	}, nil
+	if err = config.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+	return config, nil
 }
 
 func (c *Config) Validate() error {
+	if c.BaseURL == "" {
+		return fmt.Errorf("base_url is required")
+	}
+	if c.Email == "" {
+		return fmt.Errorf("email is required")
+	}
+	if c.Password == "" {
+		return fmt.Errorf("password is required")
+	}
+	if len(c.ActivitySlots) == 0 {
+		return fmt.Errorf("at least one activity slot is required")
+	}
 
 	for _, slot := range c.ActivitySlots {
 
@@ -117,13 +129,13 @@ func (a *ActivitySlot) DisplayCourseArea(area string) string {
 }
 
 func (a *ActivitySlot) DisplayBookingType(sport string) string {
-	if t, ok := sportBookingTypeMap[a.Activity]; ok {
+	if t, ok := sportBookingTypeMap[sport]; ok {
 		return t
 	}
 	return "Unknown"
 }
 
-func getConfigPath() (string, error) {
+func getConfigPath(searchHome bool) (string, error) {
 
 	currentDir, err := os.Getwd()
 	if err != nil {
@@ -132,6 +144,10 @@ func getConfigPath() (string, error) {
 
 	configPath := filepath.Join(currentDir, "config.yaml")
 	if _, err := os.Stat(configPath); err == nil {
+		return configPath, nil
+	}
+
+	if !searchHome {
 		return configPath, nil
 	}
 
@@ -145,10 +161,11 @@ func getConfigPath() (string, error) {
 		return homeConfigPath, nil
 	}
 
-	return configPath, nil
+	return "", fmt.Errorf("config file not found")
 }
 
-func loadConfigFromFile(path string) (*Config, error) {
+// loads configuration from the specified file path
+func LoadConfigFromFile(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
@@ -160,11 +177,4 @@ func loadConfigFromFile(path string) (*Config, error) {
 	}
 
 	return &config, nil
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
