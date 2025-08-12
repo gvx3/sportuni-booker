@@ -2,6 +2,9 @@
 
 A tool to automate booking your favorite sports activities at TUNI using *Playwright* (Go).
 
+> [!NOTE]  
+> TUNI Sportuni uses Microsoft 2FA so it is impossible to achieve full automation, instead a state file will be generated and live for a short period (a few days) to keep the login session.
+
 ## Prerequisites
 
 - Go version [1.24.1+](https://go.dev/dl/) or newer must be installed.
