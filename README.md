@@ -62,15 +62,10 @@ You can also specify a custom config file location using the CLI flag `-f` or `-
 
 Available configuration can be found in the following table:
 
-- base_url: "https://www.tuni.fi/sportuni/omasivu/?newPage=selection&lang=en" #required
-- email: "your.email@tuni.fi" #required
-- password: "your_password" #required
-- state_file_name: "ms_user.json" #optional
-
 | Key    | Values | Required? |
 | -------- | ------- | ------- |
-| base_url  | https://www.tuni.fi/sportuni/omasivu/?newPage=selection&lang=en   | Yes |
-| email | your.email@tuni.fi     | Yes |
+| base_url  | <https://www.tuni.fi/sportuni/omasivu/?newPage=selection&lang=en>   | Yes |
+| email | <your.email@tuni.fi>     | Yes |
 | password    | your_password    | Yes |
 | state_file_name    | ms_user.json    | No |
 | day    | Mon, Tue, Wed, Thu, Fri, Sat, Sun    | Yes |
