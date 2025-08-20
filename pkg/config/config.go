@@ -25,8 +25,8 @@ const (
 )
 
 var sportAreaMap = map[string]string{
-	Badminton: "Ball games",
-	Billiard:  "Other",
+	Badminton: "Ball game slots",
+	Billiard:  "Facilities and equipment",
 }
 
 var sportDialogMap = map[string]string{
